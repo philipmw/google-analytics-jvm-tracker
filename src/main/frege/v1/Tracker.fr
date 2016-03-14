@@ -1,0 +1,62 @@
+module com.github.philipmw.TrackerV1 where
+
+class QueryComponent a where
+    queryParams :: a -> [(String, Maybe String)]
+    queryStr :: a -> String
+    queryStr a =
+        let isParamPresent (k, Just v) = true
+            isParamPresent _ = false
+            presentParams a = filter isParamPresent (queryParams a)
+        in
+        joined "&" $ map kv (presentParams a)
+            where kv :: (String, Maybe String) -> String
+                  kv (k, Just v) = concat [k, "=", v]
+                  kv (k, _) = ""
+
+------------------
+-- Top-level types
+------------------
+
+data HitEnv = HitEnv { trackingId, clientId :: String }
+
+instance QueryComponent HitEnv where
+    queryParams (HitEnv t c) = [("v", Just "1"),
+                                ("tid", Just t),
+                                ("cid", Just c)]
+
+data Hit = PageHit { session :: SessionParams }
+         | EventHit { session :: SessionParams }
+
+instance QueryComponent Hit where
+    queryParams (PageHit s) =
+                  (queryParams s) ++
+                  [("t", Just "pageview")]
+    queryParams (EventHit s) =
+                  (queryParams s) ++
+                  [("t", Just "event")]
+
+---------------
+-- Nested types
+---------------
+
+data SessionControl = SessionStart | SessionEnd
+instance QueryComponent SessionControl where
+    queryParams SessionStart = [("sc", Just "start")]
+    queryParams SessionEnd = [("sc", Just "end")]
+
+data SessionParams = SessionParams { dataSource :: Maybe String,
+                                     userId :: Maybe String,
+                                     sessionControl :: Maybe SessionControl,
+                                     geoId :: Maybe String}
+instance QueryComponent SessionParams where
+    queryParams (SessionParams ds uid scm geo) =
+        let sessionControl (Just sc) = queryParams sc;
+            sessionControl Nothing = []
+        in
+        [("ds", ds),
+         ("uid", uid),
+         ("geoid", geo)]
+         ++ (sessionControl scm)
+
+payload :: Hit -> String
+payload hit = queryStr hit
